@@ -1,7 +1,7 @@
 # Automation Bridge Protocol v1
 
 Local IPC interface for external automation clients: decoded frame capture,
-virtual controller input, and an OSD debug overlay. Supported on Linux and
+virtual controller input, session control, and an OSD debug overlay. Supported on Linux and
 macOS; Windows is experimental and disabled by default there.
 Enabled by setting the environment variable `CHIAKI_AUTOMATION` when starting
 the GUI (any value, including `0`).
@@ -23,6 +23,10 @@ the GUI (any value, including `0`).
 ```json
 {"cmd":"hello","client":"<name>","version":1}
 {"cmd":"ping"}
+{"cmd":"hosts"}
+{"cmd":"wakeup","host":0}
+{"cmd":"connect","host":0}
+{"cmd":"disconnect"}
 {"cmd":"set_controller","buttons":["CROSS","L1"],"lx":0,"ly":0,"rx":0,"ry":0,"l2":0,"r2":0,"hold_ms":0}
 {"cmd":"controller_idle"}
 {"cmd":"subscribe_frames","format":"nv12","max_fps":20}
@@ -31,6 +35,46 @@ the GUI (any value, including `0`).
 {"cmd":"osd_markers","rects":[{"x":0.5,"y":0.3,"w":0.05,"h":0.2,"color":"#00ff00","label":"pick"}]}
 {"cmd":"osd_clear"}
 ```
+
+### Host and session control
+
+`hosts` queries the current GUI host list. It replies with:
+
+```json
+{"event":"hosts","hosts":[{"index":0,"name":"PS5-456","host":"10.22.0.31","state":"standby","registered":true}]}
+```
+
+Indices match the GUI backend, including hidden entries, and can change as
+discovery changes. Query again before selecting a host; no unsolicited host
+events are sent. `state` is the backend's discovery state, or `unknown` when
+unavailable. `host` is the address, empty for PSN-only entries.
+
+- `wakeup` and `connect` require an integer `host` index for a registered local
+  or manual host. Register through the GUI first. PSN-only entries are listed
+  but are not supported by these commands.
+- `wakeup` sends a wakeup packet without starting a session. `ok` confirms the
+  packet was sent, not that the console is ready.
+- `connect` reuses the GUI connection flow, including waking a discovered
+  standby console and waiting for it. `ok` means the connection was started,
+  not established. Observe `session` events (`connecting`, then `connected`
+  or `idle` on failure). Repeating `connect` with a nonnegative integer index
+  while a session exists returns `ok` without switching or restarting it.
+- `disconnect` cancels a pending wakeup or stops the session without putting
+  the console to sleep. It also returns `ok` when idle. Wait for `idle` before
+  reconnecting. The control connection keeps its ownership.
+- Closing the control socket releases ownership and input but does not stop
+  the Remote Play session. Launch the GUI without `--exit-app-on-stream-exit`
+  if it needs to remain available for subsequent connections.
+
+Start with `hello` and `hosts`. If idle, use `wakeup` followed by `connect`
+(or `connect` alone for a discovered standby host). Wait up to 60 seconds for
+`connected` before subscribing to frames or sending input. A command reply can
+be interleaved with session events. On failure, query `hello` and `hosts` again;
+use `disconnect` to cancel an attempt before retrying. PIN entry remains a GUI
+operation. An idle session is an environment failure, not evidence of ignored
+game input.
+
+### Controller input
 
 Notes on `set_controller`:
 
@@ -196,7 +240,7 @@ frame’s dimensions from its slot snapshot.
 ## Safety rules
 
 - One control client at a time: the first client to send a control command
-  (`set_controller`, `controller_idle`, `osd_text`, `osd_markers`,
+  (`wakeup`, `connect`, `disconnect`, `set_controller`, `controller_idle`, `osd_text`, `osd_markers`,
   `osd_clear`, `osd_image`, `osd_open`) takes the control role; control commands from other clients
   get an error until the holder disconnects.
 - Control client disconnect ⇒ automation controller state resets to idle.

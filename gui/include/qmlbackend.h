@@ -117,6 +117,7 @@ public:
     ~QmlBackend();
 
 #ifdef CHIAKI_GUI_ENABLE_AUTOMATION
+    QString automationSessionCommand(const QString &command, int index);
     AutomationBridge *automationBridge() const { return automation_bridge; }
 #endif
     QmlMainWindow *qmlWindow() const;

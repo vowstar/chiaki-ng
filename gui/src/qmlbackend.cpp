@@ -1775,6 +1775,7 @@ void QmlBackend::stopAutoConnect()
 
             session->deleteLater();
             session = nullptr;
+            emit sessionChanged(nullptr);
         }
     }
     emit autoConnectChanged();

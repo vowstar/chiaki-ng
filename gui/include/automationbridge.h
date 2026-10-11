@@ -17,6 +17,7 @@ class QJsonObject;
 class QLocalServer;
 class QLocalSocket;
 class QTimer;
+class QmlBackend;
 
 struct AutomationBridgeClient
 {
@@ -36,7 +37,7 @@ class AutomationBridge : public QObject
 	Q_PROPERTY(QVariantList osdMarkers READ OsdMarkers NOTIFY osdMarkersChanged)
 
 public:
-	AutomationBridge(AutomationFrames *frames, QObject *parent = nullptr);
+	AutomationBridge(AutomationFrames *frames, QmlBackend *backend);
 	~AutomationBridge() override;
 
 	bool Start(const QString &socket_path = QString());
@@ -84,6 +85,7 @@ private:
 	void StopFrames(const QString &message);
 
 	AutomationFrames *frames;
+	QmlBackend *backend;
 	AutomationOsd *osd;
 	QLocalServer *server = nullptr;
 	QString listen_path;

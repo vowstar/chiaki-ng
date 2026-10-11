@@ -96,6 +96,11 @@ Rectangle {
     Connections {
         target: Chiaki
 
+        function onSessionChanged() {
+            if (!Chiaki.session)
+                root.showMainView();
+        }
+
         function onWakeupStartFailed() {
             view.textVisible = false;
             infoLabel.text = qsTr("Timed out waiting for console. Exiting...");

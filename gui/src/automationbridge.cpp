@@ -2,6 +2,7 @@
 #include "automationbridge.h"
 #include "automationframes.h"
 #include "automationosd.h"
+#include "qmlbackend.h"
 
 #include <QAbstractSocket>
 #include <QDir>
@@ -55,13 +56,17 @@ static const AutomationButtonMapping automation_button_mappings[] = {
 	{ "PS", CHIAKI_CONTROLLER_BUTTON_PS },
 };
 
-AutomationBridge::AutomationBridge(AutomationFrames *frames, QObject *parent)
-	: QObject(parent)
+AutomationBridge::AutomationBridge(AutomationFrames *frames, QmlBackend *backend)
+	: QObject(backend)
 	, frames(frames)
+	, backend(backend)
 	, osd(new AutomationOsd(this))
 {
 	if(frames)
 		connect(frames, &QObject::destroyed, this, [this]() { this->frames = nullptr; });
+	connect(backend, &QmlBackend::wakeupStartInitiated, this, [this]() {
+		SetSessionState(QStringLiteral("connecting"));
+	});
 }
 
 AutomationBridge::~AutomationBridge()
@@ -366,6 +371,7 @@ void AutomationBridge::ProcessMessage(QLocalSocket *client, const QJsonObject &m
 	}
 
 	if(cmd == QLatin1String("set_controller") || cmd == QLatin1String("controller_idle")
+		|| cmd == QLatin1String("wakeup") || cmd == QLatin1String("connect") || cmd == QLatin1String("disconnect")
 		|| cmd == QLatin1String("osd_image") || cmd == QLatin1String("osd_open")
 		|| cmd == QLatin1String("osd_text") || cmd == QLatin1String("osd_markers") || cmd == QLatin1String("osd_clear"))
 	{
@@ -389,6 +395,27 @@ void AutomationBridge::ProcessMessage(QLocalSocket *client, const QJsonObject &m
 	else if(cmd == QLatin1String("ping"))
 	{
 		SendJson(client, { { QStringLiteral("event"), QStringLiteral("pong") } });
+	}
+	else if(cmd == QLatin1String("hosts"))
+	{
+		QJsonArray hosts;
+		const auto list = backend->hosts();
+		for(int i = 0; i < list.size(); ++i)
+		{
+			const auto host = list[i].toMap();
+			hosts.append(QJsonObject{{"index", i}, {"name", host.value("name").toString()},
+				{"host", host.value("address").toString()}, {"state", host.value("state", "unknown").toString()},
+				{"registered", host.value("registered").toBool()}});
+		}
+		SendJson(client, {{"event", "hosts"}, {"hosts", hosts}});
+	}
+	else if(cmd == QLatin1String("wakeup") || cmd == QLatin1String("connect") || cmd == QLatin1String("disconnect"))
+	{
+		const auto error = backend->automationSessionCommand(cmd, msg.value(QStringLiteral("host")).toInt(-1));
+		if(error.isEmpty())
+			SendOk(client, cmd);
+		else
+			SendError(client, cmd, error);
 	}
 	else if(cmd == QLatin1String("set_controller"))
 		CmdSetController(client, msg, cmd);

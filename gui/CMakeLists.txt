@@ -78,6 +78,7 @@ if(CHIAKI_GUI_ENABLE_AUTOMATION)
 	list(APPEND SOURCE_FILES
 		include/automationbridge.h
 		src/automationbridge.cpp
+		src/automationsession.cpp
 		include/automationframes.h
 		src/automationframes.cpp
 		include/automationosd.h
