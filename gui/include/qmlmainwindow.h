@@ -178,6 +178,7 @@ signals:
     void zoomFactorChanged();
     void videoPresetChanged();
     void menuRequested();
+    void inputGrabsReset();
     void directStreamChanged();
     void queueDepthAverageChanged();
     void pendingFrameAgeChanged();

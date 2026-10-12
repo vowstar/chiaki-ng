@@ -50,6 +50,7 @@ extern "C" {
 #include <QQmlComponent>
 #include <QQuickRenderTarget>
 #include <QQuickRenderControl>
+#include <QQuickOpenGLUtils>
 #include <QQuickGraphicsDevice>
 #include <QTimer>
 #include <QWaitCondition>
@@ -5127,6 +5128,7 @@ renderer_backend_ready:
         grab_input = 0;
         if (session)
             session->BlockInput(0);
+        emit inputGrabsReset();
         // Only drain at session end (teardown): prevents frame_mix use-after-free.
         // At session start there is no prior in-flight frame_mix, and the queue
         // reset below is mutex-protected, so blocking the main thread here is
@@ -6202,6 +6204,7 @@ void QmlMainWindow::beginFrame()
     if (render_backend == RenderBackend::OpenGL) {
         if (!makeOpenGLContextCurrent())
             return;
+        QQuickOpenGLUtils::resetOpenGLState();
         quick_frame = true;
         quick_render->beginFrame();
         return;
@@ -6297,8 +6300,11 @@ void QmlMainWindow::endFrame()
         return;
 
     if (render_backend == RenderBackend::OpenGL) {
+        if (!makeOpenGLContextCurrent())
+            return;
         quick_frame = false;
         quick_render->endFrame();
+        QQuickOpenGLUtils::resetOpenGLState();
         doneOpenGLContextCurrent();
         return;
     }
@@ -6824,6 +6830,9 @@ void QmlMainWindow::render()
                 logQuickBeginFrameStats(quick_begin_after_us, quick_begin_after_us - quick_begin_begin_us);
             if (quick_frame) {
                 const qint64 quick_render_call_begin_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
+                // libplacebo can release the shared context after sync().
+                makeOpenGLContextCurrent();
+                QQuickOpenGLUtils::resetOpenGLState();
                 clearQuickOpenGLTarget(quick_fbo);
                 quick_render->render();
                 const qint64 quick_render_call_after_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
@@ -7307,8 +7316,11 @@ void QmlMainWindow::render()
                 logQuickBeginFrameStats(quick_begin_after_us, quick_begin_after_us - quick_begin_begin_us);
             if (quick_frame) {
                 const qint64 quick_render_call_begin_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
-                if (render_backend == RenderBackend::OpenGL)
+                if (render_backend == RenderBackend::OpenGL) {
+                    makeOpenGLContextCurrent();
+                    QQuickOpenGLUtils::resetOpenGLState();
                     clearQuickOpenGLTarget(quick_fbo);
+                }
                 quick_render->render();
                 const qint64 quick_render_call_after_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
                 if (quick_render_call_after_us >= quick_render_call_begin_us)

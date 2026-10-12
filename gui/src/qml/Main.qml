@@ -32,6 +32,8 @@ Item {
     }
 
     function releaseInput() {
+        if (!restoreFocusItems.length)
+            return;
         Chiaki.window.releaseInput();
         let item = restoreFocusItems.pop();
         if (item && item.visible)
@@ -163,7 +165,8 @@ Item {
     function showInfoDialog(title, text) {
         infoDialog.title = title;
         infoDialog.text = text;
-        infoDialog.restoreFocusItem = Window.window.activeFocusItem;
+        if (!infoDialog.visible)
+            infoDialog.restoreFocusItem = Window.window.activeFocusItem;
         infoDialog.open();
     }
 
@@ -458,13 +461,27 @@ Item {
         id: infoDialog
         property alias text: infoDialogLabel.text
         property Item restoreFocusItem
+        property bool inputGrabbed: false
         parent: Overlay.overlay
         x: Math.round((root.width - width) / 2)
         y: Math.round((root.height - height) / 2)
         modal: true
         Material.roundedScale: Material.MediumScale
+        enter: Transition {}
+        exit: Transition {}
+        function grabDialogInput() {
+            if (!inputGrabbed) {
+                Chiaki.window.grabInput();
+                inputGrabbed = true;
+            }
+        }
+        onAboutToShow: grabDialogInput()
         onOpened: infoDialogLabel.forceActiveFocus(Qt.TabFocusReason)
         onClosed: {
+            if (inputGrabbed) {
+                inputGrabbed = false;
+                Chiaki.window.releaseInput();
+            }
             if (restoreFocusItem)
                 restoreFocusItem.forceActiveFocus(Qt.TabFocusReason);
             infoDialogLabel.focus = false;
@@ -517,6 +534,18 @@ Item {
 
     RemindDialog {
         id: remindDialog
+    }
+
+    Connections {
+        target: Chiaki.window
+
+        function onInputGrabsReset() {
+            infoDialog.inputGrabbed = false;
+            if (infoDialog.visible) {
+                infoDialog.grabDialogInput();
+                infoDialogLabel.forceActiveFocus(Qt.TabFocusReason);
+            }
+        }
     }
 
     Connections {
